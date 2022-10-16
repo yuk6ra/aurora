@@ -6,9 +6,9 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
-import { Base64 } from "./libraries/Base64.sol";
-import { Ownable } from '@openzeppelin/contracts/access/Ownable.sol';
 
 contract AuroraDots is ERC721URIStorage, Ownable {
     using Strings for uint256;
@@ -28,11 +28,9 @@ contract AuroraDots is ERC721URIStorage, Ownable {
      * @notice Generate metadata for TokenURI.
      */
     function dataURI(uint256 tokenId) public view returns(string memory){
-        // NFT title
-        string memory name = string(abi.encodePacked('NFT #', tokenId.toString()));
-        
-        // NFT image
-        string memory image = Base64.encode(generateSVG(tokenId));
+        // require(_exists(tokenId), "AuroraDots: Nonexistent token");
+        string memory name = string(abi.encodePacked('NFT #', tokenId.toString())); // NFT title        
+        string memory image = Base64.encode(generateSVG(tokenId)); // NFT image
 
         return string(
             abi.encodePacked('data:application/json;base64,',
@@ -54,7 +52,7 @@ contract AuroraDots is ERC721URIStorage, Ownable {
 
         for (uint256 i = 0 ; i < 3; i++) {
             rgb[i] = seed % 256;
-            seed = getNumber(seed);
+            seed /= 1000;
         }
         return rgb;
     }
@@ -65,7 +63,7 @@ contract AuroraDots is ERC721URIStorage, Ownable {
     function generateColors(uint256 seed) internal pure returns (string[8] memory) {
         string[8] memory colors;
         uint256[3] memory first = generateRGB(seed);
-        uint256[3] memory last = generateRGB(getNumber(seed));
+        uint256[3] memory last = generateRGB(seed / 34);
 
         colors[0] = string(abi.encodePacked('rgb(',first[0].toString(), ',', first[1].toString(), ',', first[2].toString(),')'));
 
@@ -125,28 +123,28 @@ contract AuroraDots is ERC721URIStorage, Ownable {
         uint256 seedCol = random(tokenId);
         uint256 seedPos = random(seedCol);
         uint256 lasty = 6 + seedCol % 13; // Start y position => y = 6 ~ 18.
+        uint256 x;
+        uint256 y;
+
         string[8] memory colors = generateColors(seedCol);
         bytes memory path = abi.encodePacked('<svg width="1024" height="1024" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">');
             
         for (uint256 i = 0; i < 20; i++){
-            uint256 y = lasty; // Last y position.
-            uint256 x = 6 + i; // Start x position => x = 6 ~ 25.
+            x = 6 + i; // Start x position => x = 6 ~ 25.
+            y = lasty; // Last y position.
 
-            // Both ends are short.
             if (1 < i && i < 18 ) {
                 path = generateMainPath(x, y, path, colors);
             } else {
                 path = generateEndsPath(x, y, path, colors, i);
             }
 
-            if (seedPos % 2 == 0) {
-                // if 0 => up
+            if (seedPos % 2 == 0) { // if 0 => up
                 y = lasty - (seedPos % 2 + 1);
                 if (y < 6) { // y = 0 ~ 5 (len: 6) => top margin.
                     y = lasty + (seedPos % 2 + 1);
                 }
-            } else if (seedPos % 2 == 1) {
-                // if 1 => down
+            } else if (seedPos % 2 == 1) { // if 1 => down
                 y = lasty + (seedPos % 2 + 1);
                 if (18 < y) { // y = 26 ~ 31 (len: 6), + MainPath (len: 8) => bottom margin.
                     y = lasty - (seedPos % 2 + 1);
@@ -164,9 +162,11 @@ contract AuroraDots is ERC721URIStorage, Ownable {
     function mintNFT() public payable {
         uint256 newItemId = _tokenIds.current();
 
-        require(newItemId < maxSupply, "Sold out");
+        // require(newItemId < maxSupply, "Sold out");
         // perWallet
-        require(msg.value >= mintPrice, "Must send the mint price");
+        // require(msg.value >= mintPrice, "Must send the mint price");
+
+        console.log(dataURI(newItemId));
 
         _safeMint(msg.sender, newItemId);
 
@@ -181,10 +181,6 @@ contract AuroraDots is ERC721URIStorage, Ownable {
             _tokenIds.increment();
         }
     }
-
-    function getNumber(uint256 seed) internal pure returns (uint256) {
-        return seed / 1000;
-    }
     
     function random(uint256 _input) internal pure returns(uint256){
         return uint256(keccak256(abi.encodePacked(_input)));
@@ -195,6 +191,7 @@ contract AuroraDots is ERC721URIStorage, Ownable {
     }
 
     function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+        // require(_exists(tokenId), "AuroraDots: Nonexistent token");
         return dataURI(tokenId);
     }
 
