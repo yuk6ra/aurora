@@ -10,17 +10,21 @@ import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "hardhat/console.sol";
 
-contract AuroraDots is ERC721URIStorage, Ownable {
+contract Seras is ERC721URIStorage, Ownable {
     using Strings for uint256;
     using Counters for Counters.Counter;
 
-    uint256 public constant maxSupply = 6;
-    uint256 public constant mintPrice = 0.005 ether;
-    uint256 public constant perWallet = 3;
+    uint256 public constant MAX_SUPPLY = 100;
 
-    Counters.Counter private _tokenIds;
-
+    uint256 public mintPrice = 0.005 ether;
+    uint256 public maxPerWallet = 2;
+    bool public whitelistSale = false;
     string public description;
+
+    mapping (address => uint256) public mintedPerWallet;
+    mapping (address => bool) public whitelist;
+
+    Counters.Counter private _tokenId;
 
     constructor() ERC721("myNFT", "NFT") {}
 
@@ -30,40 +34,55 @@ contract AuroraDots is ERC721URIStorage, Ownable {
     function dataURI(uint256 tokenId) public view returns(string memory){
         // require(_exists(tokenId), "AuroraDots: Nonexistent token");
         string memory name = string(abi.encodePacked('NFT #', tokenId.toString())); // NFT title        
-        string memory image = Base64.encode(generateSVG(tokenId)); // NFT image
-
+        string[7] memory attr = ["The Earth", "Teegarden's Star b", "TOI-700 d", "Kepler-1649 c", "TRAPPIST-1 d", "K2-72e", "Proxima Centauri b"];
+        bytes memory image;
+        uint256 attrNum;
+        (image, attrNum) = _generateSVG(tokenId);
         return string(
             abi.encodePacked('data:application/json;base64,',
             Base64.encode(bytes(abi.encodePacked(
                 '{"name":"', name,
                 '", "description": "', description,
-                '", "image" : "data:image/svg+xml;base64,', image,
-                '"}'
+                '", "image" : "data:image/svg+xml;base64,', Base64.encode(image),
+                '", "attributes" : [{"trait_type": "Planet", "value": "', attr[attrNum],
+                '"}]}'
             )))
             )
         );
     }
 
+    function _getColors(uint256 seed) internal pure returns (string[8] memory, uint256) {
+        string[8] memory colors;
+        if (seed % 2 == 0) {
+            colors = ["#26c5f3", "#3aaff4", "#4f98f5", "#6382f6", "#776cf6", "#8b56f7", "#a03ff8", "#b429f9"];
+        } else if (seed % 2 == 1){
+            colors = ["#d95988", "#c46b87", "#ae7e87", "#999086", "#83a286", "#6eb485", "#58c785", "#43d984"];
+        }
+        uint256 attrNum = 0;
+        return (colors, attrNum);
+    }
+
     /**
      * @notice Generate RGB colors at random.
      */
-    function generateRGB(uint256 seed) internal pure returns (uint256[3] memory) {
+    function _generateRGB(uint256 seed) internal pure returns (uint256[3] memory) {
         uint256[3] memory rgb;
 
         for (uint256 i = 0 ; i < 3; i++) {
             rgb[i] = seed % 256;
             seed /= 1000;
         }
+
         return rgb;
     }
 
     /**
      * @notice Generate a linear gradient from the first and last RGB.
      */
-    function generateColors(uint256 seed) internal pure returns (string[8] memory) {
+    function _generateColors(uint256 seed) internal pure returns (string[8] memory, uint256) {
         string[8] memory colors;
-        uint256[3] memory first = generateRGB(seed);
-        uint256[3] memory last = generateRGB(seed / 34);
+        uint256[3] memory first = _generateRGB(seed);
+        uint256[3] memory last = _generateRGB(seed / 10**10);
 
         colors[0] = string(abi.encodePacked('rgb(',first[0].toString(), ',', first[1].toString(), ',', first[2].toString(),')'));
 
@@ -75,15 +94,17 @@ contract AuroraDots is ERC721URIStorage, Ownable {
                 ((last[2] * i + (first[2] * (7 - i))) / 7).toString(),')'));
         }
 
+        uint256 attrNum = seed % 6 + 1;
+
         colors[7] = string(abi.encodePacked('rgb(',last[0].toString(), ',', last[1].toString(), ',', last[2].toString(),')'));
 
-        return colors;
+        return (colors, attrNum);
     }
     
     /**
      * @notice Generate paths for main.
      */    
-    function generateMainPath(uint256 x, uint256 y, bytes memory path, string[8] memory colors) internal pure returns (bytes memory) {
+    function _generateMainPath(uint256 x, uint256 y, bytes memory path, string[8] memory colors) internal pure returns (bytes memory) {
         for (uint256 j = 0; j < 8; j++){
             path = abi.encodePacked(path,
                 '<path fill="', colors[j % 8],'" d="M', x.toString(),',', (y + j).toString(),'h1v1H', x.toString(),'z"/>'
@@ -95,7 +116,7 @@ contract AuroraDots is ERC721URIStorage, Ownable {
     /**
      * @notice Generates paths for both ends.
      */    
-    function generateEndsPath(uint256 x, uint256 y, bytes memory path, string[8] memory colors, uint256 num) internal pure returns (bytes memory) {
+    function _generateEndsPath(uint256 x, uint256 y, bytes memory path, string[8] memory colors, uint256 num) internal pure returns (bytes memory) {
         bytes memory _path = path;
 
         if (num == 0 || num == 19) {
@@ -119,14 +140,22 @@ contract AuroraDots is ERC721URIStorage, Ownable {
     /**
      * @notice Generate SVG that will be the metadata image.
      */
-    function generateSVG(uint256 tokenId) internal pure returns (bytes memory) {
-        uint256 seedCol = random(tokenId);
-        uint256 seedPos = random(seedCol);
-        uint256 lasty = 6 + seedCol % 13; // Start y position => y = 6 ~ 18.
+    function _generateSVG(uint256 tokenId) internal pure returns (bytes memory, uint256) {
+        uint256 seedPos = _random(tokenId);
+        uint256 seedCol = _random(seedPos);
+        uint256 lasty = 8 + seedCol % 13; // Start y position => y = 8 ~ 20.
+        uint256 attrNum;
         uint256 x;
         uint256 y;
 
-        string[8] memory colors = generateColors(seedCol);
+        string[8] memory colors;
+        
+        if (_random(seedPos) % 10 >= 2) {
+            (colors, attrNum) = _generateColors(seedCol);
+        } else {
+            (colors, attrNum) = _getColors(seedCol);
+        }
+         
         bytes memory path = abi.encodePacked('<svg width="1024" height="1024" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">');
             
         for (uint256 i = 0; i < 20; i++){
@@ -134,9 +163,9 @@ contract AuroraDots is ERC721URIStorage, Ownable {
             y = lasty; // Last y position.
 
             if (1 < i && i < 18 ) {
-                path = generateMainPath(x, y, path, colors);
+                path = _generateMainPath(x, y, path, colors);
             } else {
-                path = generateEndsPath(x, y, path, colors, i);
+                path = _generateEndsPath(x, y, path, colors, i);
             }
 
             if (seedPos % 2 == 0) { // if 0 => up
@@ -156,33 +185,40 @@ contract AuroraDots is ERC721URIStorage, Ownable {
        }
         path = abi.encodePacked(path, '</svg>');
 
-        return path;
+        return (path, attrNum);
     }
 
     function mintNFT() public payable {
-        uint256 newItemId = _tokenIds.current();
-
-        // require(newItemId < maxSupply, "Sold out");
-        // perWallet
+        // require(whitelistSale, "Mint is paused");
+        // require(whitelist[msg.sender], "No whitelist");
+        uint256 tokenId = _tokenId.current();
+        // require(tokenId < MAX_SUPPLY, "Sold out");
+        // require(mintedPerWallet[msg.sender] < maxPerWallet, "Already minted max quantity per wallet");
         // require(msg.value >= mintPrice, "Must send the mint price");
 
-        console.log(dataURI(newItemId));
+        // console.log(dataURI(tokenId)); // Test用
 
-        _safeMint(msg.sender, newItemId);
-
-        _tokenIds.increment();
+        _safeMint(msg.sender, tokenId);
+        mintedPerWallet[msg.sender] += 1;
+        _tokenId.increment();
     }
 
     function reservedMint(uint256 _mintAmount) external onlyOwner {
-        require(_tokenIds.current() + _mintAmount <= maxSupply, "Sold out");
+        require(_tokenId.current() + _mintAmount <= MAX_SUPPLY, "Sold out");
 
         for (uint256 i = 0; i < _mintAmount; i++){
-            _safeMint(msg.sender, _tokenIds.current());
-            _tokenIds.increment();
+            _safeMint(msg.sender, _tokenId.current());
+            _tokenId.increment();
+        }
+    }
+
+    function addWhitelist(address[] calldata _addresses) external onlyOwner{
+        for (uint i = 0; i < _addresses.length; i++) {
+            whitelist[_addresses[i]] = true;
         }
     }
     
-    function random(uint256 _input) internal pure returns(uint256){
+    function _random(uint256 _input) internal pure returns(uint256){
         return uint256(keccak256(abi.encodePacked(_input)));
     }
 
@@ -190,8 +226,20 @@ contract AuroraDots is ERC721URIStorage, Ownable {
         description = _description;
     }
 
+    function setMintPrice(uint256 _newPrice) external onlyOwner {
+        mintPrice = _newPrice;
+    }
+
+    function setMaxPerWallet(uint256 _newQuantity) external onlyOwner {
+        maxPerWallet = _newQuantity;
+    }
+
+    function setWhitelistSale(bool _bool) external onlyOwner{
+        whitelistSale = _bool;
+    }    
+
     function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
-        // require(_exists(tokenId), "AuroraDots: Nonexistent token");
+        require(_exists(tokenId), "AuroraDots: Nonexistent token");
         return dataURI(tokenId);
     }
 
