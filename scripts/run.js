@@ -5,11 +5,16 @@ const main = async () => {
     console.log("Contract deployed to:", nftContract.address);
 
     let length = 20;
-    for (let i=0; i<length; i++){
-      let txn = await nftContract.mintNFT();
-      await txn.wait();
-      console.log("%d 回目", i);
-    };
+
+    try {
+      for (let i=0; i<length; i++){
+        let txn = await nftContract.mintNFT();
+        await txn.wait();
+        console.log("%d 回目", i);
+      };        
+    } catch(error) {
+      console.log(error);
+    }
 
     console.log("Done");
 

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: NOLICENSE
-// CC0 NFT Project
+// SPDX-License-Identifier: MIT
+// Northern Lights by yuk6ra
 
 pragma solidity ^0.8.9;
 
@@ -8,15 +8,14 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "hardhat/console.sol";
 
-contract Seras is ERC721URIStorage, Ownable {
+contract NorthernLights is ERC721URIStorage, Ownable {
     using Strings for uint256;
     using Counters for Counters.Counter;
 
-    uint256 public constant MAX_SUPPLY = 100;
+    uint256 public constant MAX_SUPPLY = 150;
 
-    uint256 public mintPrice = 0.005 ether;
+    uint256 public mintPrice = 0.01 ether;
     uint256 public maxPerWallet = 2;
     bool public whitelistSale = false;
     string public description;
@@ -26,13 +25,67 @@ contract Seras is ERC721URIStorage, Ownable {
 
     Counters.Counter private _tokenId;
 
-    constructor() ERC721("myNFT", "NFT") {}
+    constructor() ERC721("NorthernLights", "NLIGHTS") {}
+
+    function addWhitelist(address[] calldata _addresses) external onlyOwner{
+        for (uint i = 0; i < _addresses.length; i++) {
+            whitelist[_addresses[i]] = true;
+        }
+    }
+
+    function setDescription(string memory _description) external onlyOwner {
+        description = _description;
+    }
+
+    function setMintPrice(uint256 _newPrice) external onlyOwner {
+        mintPrice = _newPrice;
+    }
+
+    function setMaxPerWallet(uint256 _newQuantity) external onlyOwner {
+        maxPerWallet = _newQuantity;
+    }
+
+    function setWhitelistSale(bool _bool) external onlyOwner{
+        whitelistSale = _bool;
+    }    
+
+    function withdraw() external onlyOwner{
+        require(address(this).balance > 0, 'No balance');
+        require(payable(msg.sender).send(address(this).balance));
+    }
+
+    function reservedMint(uint256 _mintAmount) external onlyOwner {
+        require(_tokenId.current() + _mintAmount <= MAX_SUPPLY, "Sold out");
+
+        for (uint256 i = 0; i < _mintAmount; i++){
+            _safeMint(msg.sender, _tokenId.current());
+            _tokenId.increment();
+        }
+    }
+
+    function mintNFT() public payable {
+        require(whitelistSale, "Mint is paused");
+        require(whitelist[msg.sender], "No whitelist");
+        uint256 tokenId = _tokenId.current();
+        require(tokenId < MAX_SUPPLY, "Sold out");
+        require(mintedPerWallet[msg.sender] < maxPerWallet, "Already minted max quantity per wallet");
+        require(msg.value >= mintPrice, "Must send the mint price");
+
+        _safeMint(msg.sender, tokenId);
+        mintedPerWallet[msg.sender] += 1;
+        _tokenId.increment();
+    }
+
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+        require(_exists(tokenId), "NorthernLights: Nonexistent token");
+        return dataURI(tokenId);
+    }
 
     /**
      * @notice Generate metadata for TokenURI.
      */
     function dataURI(uint256 tokenId) public view returns(string memory){
-        // require(_exists(tokenId), "AuroraDots: Nonexistent token");
+        require(_exists(tokenId), "NorthernLights: Nonexistent token");
         string memory name = string(abi.encodePacked('NFT #', tokenId.toString())); // NFT title        
         string[7] memory attr = ["The Earth", "Teegarden's Star b", "TOI-700 d", "Kepler-1649 c", "TRAPPIST-1 d", "K2-72e", "Proxima Centauri b"];
         bytes memory image;
@@ -51,13 +104,18 @@ contract Seras is ERC721URIStorage, Ownable {
         );
     }
 
+    /**
+     * @notice Get default colors for The Earth Property.
+     */
     function _getColors(uint256 seed) internal pure returns (string[8] memory, uint256) {
         string[8] memory colors;
+
         if (seed % 2 == 0) {
-            colors = ["#26c5f3", "#3aaff4", "#4f98f5", "#6382f6", "#776cf6", "#8b56f7", "#a03ff8", "#b429f9"];
+            colors = ["#ab00d1", "#9314d8", "#7a29de", "#623de5", "#4952eb", "#3166f2", "#187bf8", "#008fff"];
         } else if (seed % 2 == 1){
-            colors = ["#d95988", "#c46b87", "#ae7e87", "#999086", "#83a286", "#6eb485", "#58c785", "#43d984"];
+            colors = ["#e900bd", "#cc21ab", "#af4399", "#926487", "#758575", "#58a663", "#3bc851", "#1ee93f"];
         }
+
         uint256 attrNum = 0;
         return (colors, attrNum);
     }
@@ -136,7 +194,6 @@ contract Seras is ERC721URIStorage, Ownable {
         return _path;
     }
 
-
     /**
      * @notice Generate SVG that will be the metadata image.
      */
@@ -150,10 +207,10 @@ contract Seras is ERC721URIStorage, Ownable {
 
         string[8] memory colors;
         
-        if (_random(seedPos) % 10 >= 2) {
+        if (_random(seedPos) % 10 >= 1) {
             (colors, attrNum) = _generateColors(seedCol);
         } else {
-            (colors, attrNum) = _getColors(seedCol);
+            (colors, attrNum) = _getColors(seedCol / 10);
         }
          
         bytes memory path = abi.encodePacked('<svg width="1024" height="1024" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">');
@@ -187,64 +244,8 @@ contract Seras is ERC721URIStorage, Ownable {
 
         return (path, attrNum);
     }
-
-    function mintNFT() public payable {
-        // require(whitelistSale, "Mint is paused");
-        // require(whitelist[msg.sender], "No whitelist");
-        uint256 tokenId = _tokenId.current();
-        // require(tokenId < MAX_SUPPLY, "Sold out");
-        // require(mintedPerWallet[msg.sender] < maxPerWallet, "Already minted max quantity per wallet");
-        // require(msg.value >= mintPrice, "Must send the mint price");
-
-        // console.log(dataURI(tokenId)); // Test用
-
-        _safeMint(msg.sender, tokenId);
-        mintedPerWallet[msg.sender] += 1;
-        _tokenId.increment();
-    }
-
-    function reservedMint(uint256 _mintAmount) external onlyOwner {
-        require(_tokenId.current() + _mintAmount <= MAX_SUPPLY, "Sold out");
-
-        for (uint256 i = 0; i < _mintAmount; i++){
-            _safeMint(msg.sender, _tokenId.current());
-            _tokenId.increment();
-        }
-    }
-
-    function addWhitelist(address[] calldata _addresses) external onlyOwner{
-        for (uint i = 0; i < _addresses.length; i++) {
-            whitelist[_addresses[i]] = true;
-        }
-    }
     
     function _random(uint256 _input) internal pure returns(uint256){
         return uint256(keccak256(abi.encodePacked(_input)));
-    }
-
-    function setDescription(string memory _description) external onlyOwner {
-        description = _description;
-    }
-
-    function setMintPrice(uint256 _newPrice) external onlyOwner {
-        mintPrice = _newPrice;
-    }
-
-    function setMaxPerWallet(uint256 _newQuantity) external onlyOwner {
-        maxPerWallet = _newQuantity;
-    }
-
-    function setWhitelistSale(bool _bool) external onlyOwner{
-        whitelistSale = _bool;
-    }    
-
-    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
-        require(_exists(tokenId), "AuroraDots: Nonexistent token");
-        return dataURI(tokenId);
-    }
-
-    function withdraw() external onlyOwner{
-        require(address(this).balance > 0, 'No balance');
-        require(payable(msg.sender).send(address(this).balance));
     }
 }

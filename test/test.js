@@ -2,7 +2,7 @@ const { ethers } = require("hardhat");
 
 describe("DeployTest", function() {
     it("", async function () {
-        const nftContractFactory = await ethers.getContractFactory("Seras");
+        const nftContractFactory = await ethers.getContractFactory("NorthernLights");
         const nftContract = await nftContractFactory.deploy();
         await nftContract.deployed();
         console.log("Contract deployed to:", nftContract.address);
