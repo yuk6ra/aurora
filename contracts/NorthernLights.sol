@@ -86,7 +86,7 @@ contract NorthernLights is ERC721URIStorage, Ownable {
      */
     function dataURI(uint256 tokenId) public view returns(string memory){
         require(_exists(tokenId), "NorthernLights: Nonexistent token");
-        string memory name = string(abi.encodePacked('NFT #', tokenId.toString())); // NFT title        
+        string memory name = string(abi.encodePacked('Northern Lights #', tokenId.toString())); // NFT title        
         string[7] memory attr = ["The Earth", "Teegarden's Star b", "TOI-700 d", "Kepler-1649 c", "TRAPPIST-1 d", "K2-72e", "Proxima Centauri b"];
         bytes memory image;
         uint256 attrNum;
